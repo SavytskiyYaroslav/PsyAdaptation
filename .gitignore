@@ -1,0 +1,81 @@
+# =========================
+# Python / build artifacts
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Local environment variables (secrets)
+.env
+.env.*
+!/.env.example
+
+# Packaging / tooling caches
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.pytype/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =========================
+# IDE / OS
+# =========================
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Project-specific outputs
+# =========================
+
+# Excel reports produced by psyadapt
+*.xlsx
+*.xls
+*.xlsm
+
+# If you keep sample Excel files in the repo, you can un-ignore them like:
+# !data/sample/**/*.xlsx
+
+# Generated reports / exports (common defaults in this project)
+data/
+
+# Temporary / debug exports
+*.log
+*.tmp
+*.bak
+
+# Large archives (usually not for git)
+*.zip
+*.7z
+*.rar
+
+# Allow sample data in examples/
+!examples/
+!examples/**
+!examples/**/*.xlsx
+!examples/**/*.xls
+!examples/**/*.xlsm
