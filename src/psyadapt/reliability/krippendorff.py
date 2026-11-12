@@ -49,8 +49,8 @@ def _build_distance_matrix(categories: np.ndarray, scale: Scale, pooled_values: 
     - interval: (x - y)^2
     - ordinal: Krippendorff ordinal distance based on cumulative frequencies
       between categories in pooled data:
-        d(i,j) = (sum_{k=i}^{j-1} p_k)^2  for i<j
-      where p_k are category proportions.
+        d(i,j) = (sum_{k=i}^{j} p_k - (p_i + p_j)/2)^2  for i<j
+      where p_k are category proportions among pairable ratings.
     """
     cats = categories.astype(float)
     k = cats.size
@@ -79,12 +79,12 @@ def _build_distance_matrix(categories: np.ndarray, scale: Scale, pooled_values: 
 
         p = freq / N  # proportions per category
         # cumulative proportions between categories:
-        # for i<j: sum p[i:j]
+        # for i<j: inclusive sum with half-weighted endpoints
         cum = np.cumsum(p)  # cum[t] = sum_{0..t} p
         D = np.zeros((k, k), dtype=float)
         for i in range(k):
             for j in range(i + 1, k):
-                between = (cum[j - 1] - (cum[i - 1] if i > 0 else 0.0))
+                between = cum[j] - (cum[i - 1] if i > 0 else 0.0) - (p[i] + p[j]) / 2.0
                 d = between * between
                 D[i, j] = d
                 D[j, i] = d
@@ -100,42 +100,29 @@ def _krippendorff_alpha_1item(values_by_object: list[np.ndarray], scale: Scale) 
     values_by_object: list where each element is 1D array of ratings for that object (NaNs removed)
     Returns: (alpha, Do, De, n_pairs_total)
     """
-    # Pool all ratings
-    pooled = np.concatenate([v for v in values_by_object if v.size > 0], axis=0) if values_by_object else np.array([])
-    pooled = pooled.astype(float)
-
-    if pooled.size < 2:
+    # Only units with at least two ratings contribute to coincidences.
+    pairable = [v.astype(float) for v in values_by_object if v.size >= 2]
+    if not pairable:
         return float("nan"), float("nan"), float("nan"), 0
 
-    categories = np.unique(pooled)
-    categories = np.sort(categories)
+    pooled = np.concatenate(pairable)
+    categories, counts = np.unique(pooled, return_counts=True)
     idx_map = {float(c): i for i, c in enumerate(categories)}
-
     dist = _build_distance_matrix(categories, scale, pooled)
 
-    # Observed disagreement Do: average distance across within-object pairs
+    # Directed coincidence pairs carry weight 1 / (m_u - 1).
+    # Keep the raw unordered pair count for compatibility with the public details.
     do_sum = 0.0
     n_pairs = 0
-    for v in values_by_object:
+    for v in pairable:
         m = v.size
-        if m < 2:
-            continue
-        do_sum += _pairwise_sum_dist(v, dist, idx_map)
+        do_sum += 2.0 * _pairwise_sum_dist(v, dist, idx_map) / (m - 1)
         n_pairs += m * (m - 1) // 2
 
-    if n_pairs == 0:
-        return float("nan"), float("nan"), float("nan"), 0
-
-    Do = do_sum / n_pairs
-
-    # Expected disagreement De: average distance across all pooled pairs
     N = pooled.size
-    n_pairs_all = N * (N - 1) // 2
-    if n_pairs_all == 0:
-        return float("nan"), Do, float("nan"), n_pairs
-
-    de_sum = _pairwise_sum_dist(pooled, dist, idx_map)
-    De = de_sum / n_pairs_all
+    Do = do_sum / N
+    counts = counts.astype(float)
+    De = float(np.sum(np.outer(counts, counts) * dist) / (N * (N - 1)))
 
     if not np.isfinite(De) or De == 0.0:
         return float("nan"), Do, De, n_pairs
@@ -205,7 +192,7 @@ class KrippendorffAlpha(BaseReliabilityEstimator):
 
         if has_missing:
             self.warnings_.append(
-                "Missing values detected. Krippendorff's alpha handles missingness via available pairs."
+                "Missing values detected. Coincidence weights were applied; units with fewer than two ratings were excluded."
             )
 
         low_pairs = int(np.sum(pairs_items < 5))
